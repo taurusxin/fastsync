@@ -18,6 +18,14 @@ import (
 )
 
 func Run(cfg *config.Config) {
+	// Validate all instance paths exist
+	for _, inst := range cfg.Instances {
+		if _, err := os.Stat(inst.Path); os.IsNotExist(err) {
+			logger.Error("Instance '%s' path does not exist: %s", inst.Name, inst.Path)
+			os.Exit(1)
+		}
+	}
+
 	addr := fmt.Sprintf("%s:%d", cfg.Address, cfg.Port)
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
