@@ -71,38 +71,52 @@ func handleConn(conn net.Conn, cfg *config.Config) {
 		return
 	}
 
+	// Initialize Instance Logger
+	var logOut io.Writer = os.Stdout
+	if instance.LogFile != "" && instance.LogFile != "stdout" {
+		f, err := os.OpenFile(instance.LogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			logger.Error("Failed to open instance log file %s: %v", instance.LogFile, err)
+			// Fallback to stdout
+		} else {
+			defer f.Close()
+			logOut = f
+		}
+	}
+	instLogger := logger.New(logOut, logger.ParseLevel(instance.LogMode), instance.InstanceName)
+
 	if !utils.CheckAccess(remoteIP, instance.HostAllow, instance.HostDeny) {
 		transport.SendJSON(protocol.MsgAuthResp, protocol.AuthResponse{Success: false, Message: "Access denied"})
-		logger.Warn("Access denied for %s on instance %s", remoteIP, instance.InstanceName)
+		instLogger.Warn("Access denied for %s on instance %s", remoteIP, instance.InstanceName)
 		return
 	}
 
 	if instance.Password != "" && instance.Password != authReq.Password {
 		transport.SendJSON(protocol.MsgAuthResp, protocol.AuthResponse{Success: false, Message: "Invalid password"})
-		logger.Warn("Invalid password for %s on instance %s", remoteIP, instance.InstanceName)
+		instLogger.Warn("Invalid password for %s on instance %s", remoteIP, instance.InstanceName)
 		return
 	}
 
 	transport.SendJSON(protocol.MsgAuthResp, protocol.AuthResponse{Success: true})
-	logger.Info("Auth success for %s on instance %s", remoteIP, instance.InstanceName)
+	instLogger.Info("Client %s connected", remoteIP)
 
 	if authReq.Compress {
 		if err := transport.EnableCompression(); err != nil {
-			logger.Error("Failed to enable compression: %v", err)
+			instLogger.Error("Failed to enable compression: %v", err)
 			return
 		}
 	}
 
-	handleSession(transport, instance)
+	handleSession(transport, instance, instLogger)
 }
 
-func handleSession(t *protocol.Transport, inst *config.InstanceConfig) {
+func handleSession(t *protocol.Transport, inst *config.InstanceConfig, log *logger.Logger) {
 	buf := make([]byte, 32*1024)
 	for {
 		msgType, length, err := t.ReadHeader()
 		if err != nil {
 			if err != io.EOF {
-				logger.Error("Read error: %v", err)
+				log.Error("Read error: %v", err)
 			}
 			return
 		}
@@ -120,7 +134,7 @@ func handleSession(t *protocol.Transport, inst *config.InstanceConfig) {
 			// Let's assume we do it.
 			files, err := pkgSync.Scan(inst.Path, strings.Split(inst.Exclude, ","), true)
 			if err != nil {
-				logger.Error("Scan failed: %v", err)
+				log.Error("Scan failed: %v", err)
 				t.SendJSON(protocol.MsgError, protocol.AuthResponse{Message: err.Error()}) // Reuse struct? No, map[string]string?
 				// Just send error type with simple string
 				t.Send(protocol.MsgError, []byte(err.Error()))
@@ -136,14 +150,14 @@ func handleSession(t *protocol.Transport, inst *config.InstanceConfig) {
 
 			absPath, err := utils.SecureJoin(inst.Path, relPath)
 			if err != nil {
-				logger.Error("Security error: %v", err)
+				log.Error("Security error: %v", err)
 				t.Send(protocol.MsgError, []byte("Invalid path"))
 				continue
 			}
 
 			f, err := os.Open(absPath)
 			if err != nil {
-				logger.Error("Open file error: %v", err)
+				log.Error("Open file error: %v", err)
 				t.Send(protocol.MsgError, []byte(err.Error()))
 				continue
 			}
@@ -155,6 +169,7 @@ func handleSession(t *protocol.Transport, inst *config.InstanceConfig) {
 				Mode:    uint32(info.Mode()),
 				ModTime: info.ModTime().Unix(),
 			})
+			log.Info("Sending file: %s", relPath)
 
 			if info.IsDir() {
 				f.Close()
@@ -184,7 +199,7 @@ func handleSession(t *protocol.Transport, inst *config.InstanceConfig) {
 
 			absPath, err := utils.SecureJoin(inst.Path, startMsg.Path)
 			if err != nil {
-				logger.Error("Security error: %v", err)
+				log.Error("Security error: %v", err)
 				// Skip until EndFile
 				discardFile(t)
 				continue
@@ -201,7 +216,7 @@ func handleSession(t *protocol.Transport, inst *config.InstanceConfig) {
 
 			f, err := os.OpenFile(absPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(startMsg.Mode))
 			if err != nil {
-				logger.Error("Create file error: %v", err)
+				log.Error("Create file error: %v", err)
 				discardFile(t)
 				continue
 			}
@@ -234,6 +249,8 @@ func handleSession(t *protocol.Transport, inst *config.InstanceConfig) {
 				os.Chmod(absPath, os.FileMode(startMsg.Mode))
 			}
 
+			log.Info("Received file: %s", startMsg.Path)
+
 		case protocol.MsgDeleteFile:
 			pathData := make([]byte, length)
 			io.ReadFull(t.GetConn(), pathData)
@@ -241,7 +258,7 @@ func handleSession(t *protocol.Transport, inst *config.InstanceConfig) {
 			absPath, err := utils.SecureJoin(inst.Path, relPath)
 			if err == nil {
 				os.Remove(absPath) // Or RemoveAll?
-				logger.Info("Deleted %s", relPath)
+				log.Info("Deleted %s", relPath)
 			}
 
 		case protocol.MsgDone:

@@ -42,15 +42,17 @@ func (l Level) String() string {
 }
 
 type Logger struct {
-	mu    sync.Mutex
-	out   io.Writer
-	level Level
+	mu     sync.Mutex
+	out    io.Writer
+	level  Level
+	prefix string
 }
 
-func New(out io.Writer, level Level) *Logger {
+func New(out io.Writer, level Level, prefix string) *Logger {
 	return &Logger{
-		out:   out,
-		level: level,
+		out:    out,
+		level:  level,
+		prefix: prefix,
 	}
 }
 
@@ -61,7 +63,11 @@ func (l *Logger) Output(level Level, msg string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
-	fmt.Fprintf(l.out, "[%s] [%s] %s\n", timestamp, level.String(), msg)
+	prefixStr := ""
+	if l.prefix != "" {
+		prefixStr = fmt.Sprintf("[%s] ", l.prefix)
+	}
+	fmt.Fprintf(l.out, "[%s] [%s] %s%s\n", timestamp, level.String(), prefixStr, msg)
 }
 
 func (l *Logger) Info(format string, v ...interface{}) {
@@ -77,7 +83,7 @@ func (l *Logger) Error(format string, v ...interface{}) {
 }
 
 // Global logger instance
-var std = New(os.Stdout, LevelInfo)
+var std = New(os.Stdout, LevelInfo, "Main")
 
 func SetGlobal(l *Logger) {
 	std = l
