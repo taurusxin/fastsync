@@ -48,8 +48,34 @@ func isExcluded(path string, root string, excludes []string) bool {
 }
 
 func Scan(root string, excludes []string, calcHash bool) ([]protocol.FileInfo, error) {
+	rootInfo, err := os.Stat(root)
+	if err != nil {
+		return nil, err
+	}
+
+	if !rootInfo.IsDir() {
+		// Single file
+		if isExcluded(root, root, excludes) {
+			return nil, nil
+		}
+		fi := protocol.FileInfo{
+			Path:    rootInfo.Name(),
+			Size:    rootInfo.Size(),
+			ModTime: rootInfo.ModTime().Unix(),
+			Mode:    uint32(rootInfo.Mode()),
+			IsDir:   false,
+		}
+		if calcHash {
+			hash, err := CalculateHash(root)
+			if err == nil {
+				fi.Hash = hash
+			}
+		}
+		return []protocol.FileInfo{fi}, nil
+	}
+
 	var files []protocol.FileInfo
-	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+	err = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
