@@ -32,6 +32,10 @@ type AuthRequest struct {
 	Compress bool
 }
 
+type FileListRequest struct {
+	Checksum bool `json:"checksum"`
+}
+
 type AuthResponse struct {
 	Success bool   `json:"success"`
 	Message string `json:"message"`

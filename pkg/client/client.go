@@ -235,7 +235,10 @@ func syncRemoteLocal(srcInfo *RemoteInfo, target string, opts Options) {
 	defer t.Close() // Main connection
 
 	// 2. Request File List
-	if err = t.Send(protocol.MsgFileList, nil); err != nil {
+	req := protocol.FileListRequest{
+		Checksum: opts.Checksum,
+	}
+	if err = t.SendJSON(protocol.MsgFileList, req); err != nil {
 		logger.Error("Failed to request file list: %v", err)
 		return
 	}

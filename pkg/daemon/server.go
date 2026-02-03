@@ -158,16 +158,20 @@ func handleSession(t *protocol.Transport, inst *config.InstanceConfig, log *logg
 
 		switch msgType {
 		case protocol.MsgFileList:
-			// Discard payload if any (should be 0 length for request?)
-			// Protocol design check: Does client send MsgFileList to request it?
-			// Let's assume yes.
+			var req protocol.FileListRequest
 			if length > 0 {
-				io.CopyN(io.Discard, t.GetConn(), int64(length))
+				data := make([]byte, length)
+				if _, err := io.ReadFull(t.GetConn(), data); err != nil {
+					log.Error("Failed to read FileListRequest: %v", err)
+					return
+				}
+				if err := json.Unmarshal(data, &req); err != nil {
+					log.Error("Failed to unmarshal FileListRequest: %v", err)
+					return
+				}
 			}
 
-			// Calculate hashes? Expensive.
-			// Let's assume we do it.
-			files, err := pkgSync.Scan(inst.Path, strings.Split(inst.Exclude, ","), true)
+			files, err := pkgSync.Scan(inst.Path, strings.Split(inst.Exclude, ","), req.Checksum)
 			if err != nil {
 				log.Error("Scan failed: %v", err)
 				t.SendJSON(protocol.MsgError, protocol.AuthResponse{Message: err.Error()}) // Reuse struct? No, map[string]string?
