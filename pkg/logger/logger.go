@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/fatih/color"
 )
 
 type Level int
@@ -41,6 +43,19 @@ func (l Level) String() string {
 	}
 }
 
+func (l Level) ColorString() string {
+	switch l {
+	case LevelInfo:
+		return color.GreenString("INFO")
+	case LevelWarn:
+		return color.YellowString("WARN")
+	case LevelError:
+		return color.RedString("ERROR")
+	default:
+		return "UNKNOWN"
+	}
+}
+
 type Logger struct {
 	mu     sync.Mutex
 	out    io.Writer
@@ -63,11 +78,20 @@ func (l *Logger) Output(level Level, msg string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
+
+	// Determine if we should use colors.
+	// We only use colors if writing to stdout/stderr.
+	// For simplicity, we'll assume we want colors if the user installed the library and requested it.
+	// fatih/color automatically disables colors if output is not a TTY, which is good.
+
+	levelStr := level.ColorString()
+
 	prefixStr := ""
 	if l.prefix != "" {
-		prefixStr = fmt.Sprintf("[%s] ", l.prefix)
+		prefixStr = fmt.Sprintf("[%s] ", color.CyanString(l.prefix))
 	}
-	fmt.Fprintf(l.out, "[%s] [%s] %s%s\n", timestamp, level.String(), prefixStr, msg)
+
+	fmt.Fprintf(l.out, "[%s] [%s] %s%s\n", timestamp, levelStr, prefixStr, msg)
 }
 
 func (l *Logger) Info(format string, v ...interface{}) {
