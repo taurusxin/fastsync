@@ -55,7 +55,7 @@ fastsync source target [options]
 **选项：**
 
 * `-d`: **删除 (Delete)**。如果源中文件已删除，则同步删除目标中的文件。
-* `-c`: **覆盖 (Overwrite)**。遇到同名文件直接覆盖（默认行为是如果大小/时间匹配则跳过）。
+* `-o`: **覆盖 (Overwrite)**。遇到同名文件直接覆盖（默认行为是如果大小/时间匹配则跳过）。
 * `-s`: **哈希校验 (Checksum)**。使用内容哈希检测文件变化（较慢但更准确）。
 * `-z`: **压缩 (Compress)**。传输时启用 zlib 压缩。
 * `-a`: **归档 (Archive)**。保留文件属性（权限、修改时间等）。
@@ -69,10 +69,10 @@ fastsync source target [options]
 ./fastsync ./source ./target -v -a
 
 # 本地同步到远程 (推模式)
-./fastsync ./source secret@192.168.1.100:7900/backup -z -t 4
+./fastsync ./source secret@192.168.1.100:7963/backup -z -t 4
 
 # 远程同步到本地 (拉模式)
-./fastsync secret@192.168.1.100:7900/backup ./restore -d -a
+./fastsync secret@192.168.1.100:7963/backup ./restore -d -a
 ```
 
 ### 配置说明
@@ -82,13 +82,16 @@ fastsync source target [options]
 **全局配置：**
 
 * `address`: 绑定地址 (默认 "127.0.0.1")。
-* `bind_port`: 监听端口 (默认 7900)。
+* `port`: 监听端口 (默认 7963)。
+* `log_level`: 全局日志等级 (info, warn, error)。
 * `log_file`: 全局日志文件路径。
 
 **实例配置：**
 
-* `instance_name`: 同步模块的唯一名称。
+* `name`: 同步模块的唯一名称。
 * `path`: 服务端提供的本地文件路径。
 * `password`: 认证密码。
 * `exclude`: 逗号分隔的忽略文件模式列表。
 * `host_allow` / `host_deny`: 允许/拒绝连接的 IP CIDR 列表。
+* `log_level`: 实例日志等级。
+* `log_file`: 实例日志文件路径。

@@ -57,7 +57,7 @@ fastsync source target [options]
 **Options:**
 
 * `-d`: **Delete**. Delete files in target that are missing in source.
-* `-c`: **Overwrite**. Overwrite existing files in target (default is to skip if size/time matches).
+* `-o`: **Overwrite**. Overwrite existing files in target (default is to skip if size/time matches).
 * `-s`: **Checksum**. Use content hashing to detect changes (slower but more accurate).
 * `-z`: **Compress**. Enable zlib compression during transfer.
 * `-a`: **Archive**. Preserve file attributes (permissions, modification time).
@@ -71,10 +71,10 @@ fastsync source target [options]
 ./fastsync ./source ./target -v -a
 
 # Local to Remote (Push)
-./fastsync ./source secret@192.168.1.100:7900/backup -z -t 4
+./fastsync ./source secret@192.168.1.100:7963/backup -z -t 4
 
 # Remote to Local (Pull)
-./fastsync secret@192.168.1.100:7900/backup ./restore -d -a
+./fastsync secret@192.168.1.100:7963/backup ./restore -d -a
 ```
 
 ### Configuration
@@ -84,13 +84,16 @@ A sample configuration file (`fastsync.toml.example`) is provided.
 **Global Settings:**
 
 * `address`: Bind address (default "127.0.0.1").
-* `bind_port`: Listening port (default 7900).
+* `port`: Listening port (default 7963).
+* `log_level`: Global log level (info, warn, error).
 * `log_file`: Path to global log file.
 
 **Instance Settings:**
 
-* `instance_name`: Unique name for the sync module.
+* `name`: Unique name for the sync module.
 * `path`: Local file system path to serve.
 * `password`: Authentication password.
 * `exclude`: Comma-separated list of glob patterns to ignore.
 * `host_allow` / `host_deny`: CIDR IP lists for access control.
+* `log_level`: Instance log level.
+* `log_file`: Path to instance log file.
