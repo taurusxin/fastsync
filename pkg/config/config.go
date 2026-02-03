@@ -8,27 +8,29 @@ import (
 
 type Config struct {
 	Address   string           `toml:"address"`
-	BindPort  int              `toml:"bind_port"`
+	Port      int              `toml:"port"`
+	LogLevel  string           `toml:"log_level"`
 	LogFile   string           `toml:"log_file"`
 	Instances []InstanceConfig `toml:"instances"`
 }
 
 type InstanceConfig struct {
-	InstanceName   string `toml:"instance_name"`
+	Name           string `toml:"name"`
 	Path           string `toml:"path"`
 	Password       string `toml:"password"`
 	Exclude        string `toml:"exclude"` // Comma separated
 	MaxConnections int    `toml:"max_connections"`
 	HostAllow      string `toml:"host_allow"` // Comma separated
 	HostDeny       string `toml:"host_deny"`  // Comma separated
-	LogMode        string `toml:"log_mode"`
+	LogLevel       string `toml:"log_level"`
 	LogFile        string `toml:"log_file"`
 }
 
 func NewConfig() *Config {
 	return &Config{
 		Address:  "127.0.0.1",
-		BindPort: 7900,
+		Port:     7963,
+		LogLevel: "info",
 	}
 }
 
@@ -45,11 +47,11 @@ func LoadConfig(path string) (*Config, error) {
 
 	// Apply defaults for instances
 	for i := range cfg.Instances {
-		if cfg.Instances[i].InstanceName == "" {
-			cfg.Instances[i].InstanceName = "default"
+		if cfg.Instances[i].Name == "" {
+			cfg.Instances[i].Name = "default"
 		}
-		if cfg.Instances[i].LogMode == "" {
-			cfg.Instances[i].LogMode = "info"
+		if cfg.Instances[i].LogLevel == "" {
+			cfg.Instances[i].LogLevel = "info"
 		}
 		// LogFile defaults to stdout (empty string usually means stdout in our logic later)
 	}

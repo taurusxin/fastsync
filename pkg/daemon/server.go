@@ -18,7 +18,7 @@ import (
 )
 
 func Run(cfg *config.Config) {
-	addr := fmt.Sprintf("%s:%d", cfg.Address, cfg.BindPort)
+	addr := fmt.Sprintf("%s:%d", cfg.Address, cfg.Port)
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		logger.Error("Failed to bind %s: %v", addr, err)
@@ -59,7 +59,7 @@ func handleConn(conn net.Conn, cfg *config.Config) {
 	var instance *config.InstanceConfig
 	found := false
 	for i := range cfg.Instances {
-		if cfg.Instances[i].InstanceName == authReq.Instance {
+		if cfg.Instances[i].Name == authReq.Instance {
 			instance = &cfg.Instances[i]
 			found = true
 			break
@@ -83,17 +83,17 @@ func handleConn(conn net.Conn, cfg *config.Config) {
 			logOut = f
 		}
 	}
-	instLogger := logger.New(logOut, logger.ParseLevel(instance.LogMode), instance.InstanceName)
+	instLogger := logger.New(logOut, logger.ParseLevel(instance.LogLevel), instance.Name)
 
 	if !utils.CheckAccess(remoteIP, instance.HostAllow, instance.HostDeny) {
 		transport.SendJSON(protocol.MsgAuthResp, protocol.AuthResponse{Success: false, Message: "Access denied"})
-		instLogger.Warn("Access denied for %s on instance %s", remoteIP, instance.InstanceName)
+		instLogger.Warn("Access denied for %s on instance %s", remoteIP, instance.Name)
 		return
 	}
 
 	if instance.Password != "" && instance.Password != authReq.Password {
 		transport.SendJSON(protocol.MsgAuthResp, protocol.AuthResponse{Success: false, Message: "Invalid password"})
-		instLogger.Warn("Invalid password for %s on instance %s", remoteIP, instance.InstanceName)
+		instLogger.Warn("Invalid password for %s on instance %s", remoteIP, instance.Name)
 		return
 	}
 

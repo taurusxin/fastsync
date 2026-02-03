@@ -63,7 +63,7 @@ func parseRemote(s string) *RemoteInfo {
 		Password: matches[2],
 		Host:     matches[3],
 		Instance: matches[6],
-		Port:     7900,
+		Port:     7963,
 	}
 	if matches[5] != "" {
 		p, _ := strconv.Atoi(matches[5])
@@ -122,8 +122,21 @@ func syncLocalLocal(source, target string, opts Options) {
 
 	logger.Info("Found %d actions", len(actions))
 
+	// Check if source is a file
+	srcInfo, _ := os.Stat(source)
+	isSourceFile := srcInfo != nil && !srcInfo.IsDir()
+
 	executeActions(actions, opts.Threads, func(a pkgSync.FileAction) error {
-		srcPath, _ := utils.SecureJoin(source, a.Path)
+		var srcPath string
+		var err error
+		if isSourceFile {
+			srcPath = source
+		} else {
+			srcPath, err = utils.SecureJoin(source, a.Path)
+			if err != nil {
+				return err
+			}
+		}
 		tgtPath, _ := utils.SecureJoin(target, a.Path)
 
 		switch a.Type {
@@ -374,8 +387,21 @@ func syncLocalRemote(source string, tgtInfo *RemoteInfo, opts Options) {
 	})
 	logger.Info("Found %d actions", len(actions))
 
+	// Check if source is a file
+	srcInfo, _ := os.Stat(source)
+	isSourceFile := srcInfo != nil && !srcInfo.IsDir()
+
 	executeActions(actions, opts.Threads, func(a pkgSync.FileAction) error {
-		srcPath, _ := utils.SecureJoin(source, a.Path)
+		var srcPath string
+		var err error
+		if isSourceFile {
+			srcPath = source
+		} else {
+			srcPath, err = utils.SecureJoin(source, a.Path)
+			if err != nil {
+				return err
+			}
+		}
 
 		switch a.Type {
 		case pkgSync.ActionDelete:
