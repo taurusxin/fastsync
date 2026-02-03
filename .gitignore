@@ -1,0 +1,32 @@
+# Binaries
+fastsync
+fastsync.exe
+fastsync-test
+*.o
+
+# Logs
+*.log
+logs/
+
+# Test Artifacts
+test/
+test_root/
+/test_sync/
+/test_target/
+/test_source/
+coverage.out
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Config
+config.toml
+*.toml
+!fastsync.toml.example

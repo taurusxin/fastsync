@@ -1,0 +1,58 @@
+# Fastsync 配置文件示例
+
+# --- 全局配置 ---
+
+# 绑定地址，默认为 127.0.0.1
+# 如果需要允许外部连接，请设置为 0.0.0.0 或具体的局域网 IP
+address = "0.0.0.0"
+
+# 绑定端口，默认为 7900
+bind_port = 7900
+
+# 全局日志文件路径
+# 记录服务器启动、连接建立等全局事件
+# 如果留空，通常输出到标准输出
+log_file = "./fastsync_global.log"
+
+
+# --- 实例配置 ---
+# 可以配置多个实例，每个实例对应一个同步目录
+
+# 实例 1：默认实例
+[[instances]]
+# [必须] 实例名称，客户端连接时使用 (例如: password@ip:port/default)
+instance_name = "default"
+
+# [必须] 服务端提供的文件路径
+path = "./test/source"
+
+# 实例密码，默认为空（不建议生产环境为空）
+password = "secret_password"
+
+# 忽略传输的文件或目录列表，用逗号分隔
+exclude = "*.tmp,*.log,.git"
+
+# 最大并发连接数，0 表示不限制
+max_connections = 10
+
+# 允许连接的客户端 IP (CIDR 格式)，用逗号分隔
+# 留空表示允许所有
+host_allow = "192.168.1.0/24,127.0.0.1/32"
+
+# 禁止连接的客户端 IP (CIDR 格式)，用逗号分隔
+host_deny = ""
+
+# 日志等级: info, warn, error
+log_mode = "info"
+
+# 该实例的日志目标，留空或 stdout 表示输出到控制台
+# 也可以指定具体的文件路径
+log_file = "./fastsync_default.log"
+
+
+# 实例 2：备份实例
+[[instances]]
+instance_name = "backup"
+path = "/tmp/fastsync_backup"
+password = "backup_pass"
+log_mode = "warn"
