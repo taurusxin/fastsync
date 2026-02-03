@@ -6,8 +6,11 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/taurusxin/fastsync/pkg/config"
@@ -34,14 +37,36 @@ func Run(cfg *config.Config) {
 	}
 	logger.Info("Listening on %s", addr)
 
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			logger.Error("Accept error: %v", err)
-			continue
+	var wg sync.WaitGroup
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				// If error is "use of closed network connection", we are shutting down
+				if strings.Contains(err.Error(), "use of closed network connection") {
+					return
+				}
+				logger.Error("Accept error: %v", err)
+				continue
+			}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				handleConn(conn, cfg)
+			}()
 		}
-		go handleConn(conn, cfg)
-	}
+	}()
+
+	// Wait for interrupt signal
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	<-c
+
+	logger.Info("Shutting down server...")
+	listener.Close()
+	logger.Info("Waiting for active connections to finish...")
+	wg.Wait()
+	logger.Info("Server stopped gracefully")
 }
 
 func handleConn(conn net.Conn, cfg *config.Config) {
