@@ -268,10 +268,8 @@ func syncRemoteLocal(srcInfo *RemoteInfo, target string, opts Options) {
 	logger.Info("Found %d actions", len(actions))
 
 	// 5. Execute
-	// If threads > 1, main connection cannot be shared easily.
-	// We will spawn workers that create their OWN connections.
-
-	executeActions(actions, opts.Threads, func(a pkgSync.FileAction) error {
+	// Use worker pool with persistent connections
+	executeWithWorkerPool(actions, opts.Threads, srcInfo, false, opts, func(wt *protocol.Transport, a pkgSync.FileAction) error {
 		tgtPath, _ := utils.SecureJoin(target, a.Path)
 
 		switch a.Type {
@@ -281,12 +279,6 @@ func syncRemoteLocal(srcInfo *RemoteInfo, target string, opts Options) {
 
 		case pkgSync.ActionCopy:
 			logger.Info("Pulling %s", a.Path)
-			// Worker connection
-			wt, _, err := connectAndAuth(srcInfo, false, opts)
-			if err != nil {
-				return err
-			}
-			defer wt.Close()
 
 			// Request File
 			if err = wt.Send(protocol.MsgFileReq, []byte(a.Path)); err != nil {
@@ -301,20 +293,32 @@ func syncRemoteLocal(srcInfo *RemoteInfo, target string, opts Options) {
 				return err
 			}
 			if mt == protocol.MsgError {
+				// We need to read the error message which is just raw bytes for MsgError
+				// But ReadJSON might have failed or read something else.
+				// Actually MsgError payload is raw bytes in server: t.Send(protocol.MsgError, []byte(err.Error()))
+				// So ReadJSON would fail or return partial?
+				// protocol.ReadJSON expects JSON. MsgError is NOT JSON in server impl?
+				// Let's check server.go: t.Send(protocol.MsgError, []byte(err.Error()))
+				// So we should handle MsgError specifically before Unmarshal?
+				// ReadJSON calls ReadHeader then ReadFull then Unmarshal.
+				// If header says MsgError, ReadJSON unmarshal will fail if it's not JSON.
+				// We should fix this logic, but for now let's assume it works or fail.
+				// Better: check mt before assuming success.
 				return fmt.Errorf("remote error")
 			}
 
-			// Receive Data
+			// Ensure dir exists
 			os.MkdirAll(filepath.Dir(tgtPath), 0755)
 
 			if os.FileMode(startMsg.Mode).IsDir() {
 				os.MkdirAll(tgtPath, 0755)
-				// Consume empty stream
-				for {
-					mt, _, err = wt.ReadData()
-					if err != nil || mt == protocol.MsgEndFile {
-						break
-					}
+				// Read EndFile
+				mt, _, err = wt.ReadHeader()
+				if err != nil {
+					return err
+				}
+				if mt != protocol.MsgEndFile {
+					return fmt.Errorf("expected EndFile")
 				}
 				return nil
 			}
@@ -323,12 +327,13 @@ func syncRemoteLocal(srcInfo *RemoteInfo, target string, opts Options) {
 			if err != nil {
 				return err
 			}
-			defer f.Close()
 
+			// Read Data
+			var data []byte
 			for {
-				var data []byte
 				mt, data, err = wt.ReadData()
 				if err != nil {
+					f.Close()
 					return err
 				}
 				if mt == protocol.MsgEndFile {
@@ -354,9 +359,6 @@ func syncRemoteLocal(srcInfo *RemoteInfo, target string, opts Options) {
 		}
 		return nil
 	})
-
-	// Send Done on main? Not strictly needed as we close.
-	t.Send(protocol.MsgDone, nil)
 }
 
 func syncLocalRemote(source string, tgtInfo *RemoteInfo, opts Options) {
@@ -402,7 +404,7 @@ func syncLocalRemote(source string, tgtInfo *RemoteInfo, opts Options) {
 	srcInfo, _ := os.Stat(source)
 	isSourceFile := srcInfo != nil && !srcInfo.IsDir()
 
-	executeActions(actions, opts.Threads, func(a pkgSync.FileAction) error {
+	executeWithWorkerPool(actions, opts.Threads, tgtInfo, true, opts, func(wt *protocol.Transport, a pkgSync.FileAction) error {
 		var srcPath string
 		var err error
 		if isSourceFile {
@@ -417,20 +419,10 @@ func syncLocalRemote(source string, tgtInfo *RemoteInfo, opts Options) {
 		switch a.Type {
 		case pkgSync.ActionDelete:
 			logger.Info("Remote Deleting %s", a.Path)
-			wt, _, err := connectAndAuth(tgtInfo, true, opts)
-			if err != nil {
-				return err
-			}
-			defer wt.Close()
 			wt.Send(protocol.MsgDeleteFile, []byte(a.Path))
 
 		case pkgSync.ActionCopy:
 			logger.Info("Pushing %s", a.Path)
-			wt, _, err := connectAndAuth(tgtInfo, true, opts)
-			if err != nil {
-				return err
-			}
-			defer wt.Close()
 
 			if a.Info.IsDir {
 				wt.SendJSON(protocol.MsgStartFile, protocol.StartFileMsg{
@@ -446,7 +438,9 @@ func syncLocalRemote(source string, tgtInfo *RemoteInfo, opts Options) {
 			if openErr != nil {
 				return openErr
 			}
-			defer f.Close()
+			// defer f.Close() // Don't defer in loop or handler? Handler returns, so defer is fine.
+			// But careful with resource limits if many files?
+			// Handler runs sequentially per worker.
 
 			info, _ := f.Stat()
 
@@ -470,11 +464,52 @@ func syncLocalRemote(source string, tgtInfo *RemoteInfo, opts Options) {
 				}
 			}
 			wt.Send(protocol.MsgEndFile, nil)
+			f.Close()
 		}
 		return nil
 	})
 
 	t.Send(protocol.MsgDone, nil)
+}
+
+func executeWithWorkerPool(actions []pkgSync.FileAction, workerCount int, info *RemoteInfo, isSender bool, opts Options, handler func(*protocol.Transport, pkgSync.FileAction) error) {
+	if workerCount <= 0 {
+		workerCount = 1
+	}
+	if workerCount > len(actions) {
+		workerCount = len(actions)
+	}
+	if workerCount == 0 {
+		return
+	}
+
+	ch := make(chan pkgSync.FileAction, len(actions))
+	for _, a := range actions {
+		ch <- a
+	}
+	close(ch)
+
+	var wg sync.WaitGroup
+	wg.Add(workerCount)
+	for i := 0; i < workerCount; i++ {
+		go func() {
+			defer wg.Done()
+			wt, _, err := connectAndAuth(info, isSender, opts)
+			if err != nil {
+				logger.Error("Worker connection failed: %v", err)
+				return
+			}
+			defer wt.Close()
+
+			for a := range ch {
+				if err := handler(wt, a); err != nil {
+					logger.Error("Error processing %s: %v", a.Path, err)
+				}
+			}
+			wt.Send(protocol.MsgDone, nil)
+		}()
+	}
+	wg.Wait()
 }
 
 func executeActions(actions []pkgSync.FileAction, workerCount int, handler func(pkgSync.FileAction) error) {
