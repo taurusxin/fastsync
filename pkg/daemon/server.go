@@ -104,7 +104,10 @@ func handleConn(conn net.Conn, cfg *config.Config) {
 		return
 	}
 
-	transport.SendJSON(protocol.MsgAuthResp, protocol.AuthResponse{Success: true})
+	transport.SendJSON(protocol.MsgAuthResp, protocol.AuthResponse{
+		Success: true,
+		Exclude: instance.Exclude,
+	})
 	instLogger.Info("Client %s connected", remoteIP)
 
 	if authReq.Compress {

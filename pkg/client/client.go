@@ -183,11 +183,11 @@ func copyFile(src, dst string, mode uint32) error {
 	return err
 }
 
-func connectAndAuth(info *RemoteInfo, isSender bool, opts Options) (*protocol.Transport, error) {
+func connectAndAuth(info *RemoteInfo, isSender bool, opts Options) (*protocol.Transport, string, error) {
 	addr := net.JoinHostPort(info.Host, strconv.Itoa(info.Port))
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	t := protocol.NewTransport(conn)
 
@@ -200,34 +200,34 @@ func connectAndAuth(info *RemoteInfo, isSender bool, opts Options) (*protocol.Tr
 	}
 	if err := t.SendJSON(protocol.MsgAuthReq, req); err != nil {
 		t.Close()
-		return nil, err
+		return nil, "", err
 	}
 
 	var resp protocol.AuthResponse
 	if _, err := t.ReadJSON(&resp); err != nil {
 		t.Close()
-		return nil, err
+		return nil, "", err
 	}
 	if !resp.Success {
 		t.Close()
-		return nil, fmt.Errorf("auth failed: %s", resp.Message)
+		return nil, "", fmt.Errorf("auth failed: %s", resp.Message)
 	}
 
 	if opts.Compress {
 		if err := t.EnableCompression(); err != nil {
 			t.Close()
-			return nil, err
+			return nil, "", err
 		}
 	}
 
-	return t, nil
+	return t, resp.Exclude, nil
 }
 
 func syncRemoteLocal(srcInfo *RemoteInfo, target string, opts Options) {
 	logger.Info("Syncing Remote %s -> Local %s", srcInfo.Host, target)
 
 	// 1. Connect Main
-	t, err := connectAndAuth(srcInfo, false, opts) // Client is Receiver (Sender=false)
+	t, remoteExcludes, err := connectAndAuth(srcInfo, false, opts) // Client is Receiver (Sender=false)
 	if err != nil {
 		logger.Error("Connection failed: %v", err)
 		return
@@ -247,7 +247,11 @@ func syncRemoteLocal(srcInfo *RemoteInfo, target string, opts Options) {
 	}
 
 	// 3. Scan Local Target
-	tgtFiles, scanErr := pkgSync.Scan(target, nil, opts.Checksum)
+	excludes := []string{}
+	if remoteExcludes != "" {
+		excludes = strings.Split(remoteExcludes, ",")
+	}
+	tgtFiles, scanErr := pkgSync.Scan(target, excludes, opts.Checksum)
 	if scanErr != nil {
 		tgtFiles = []protocol.FileInfo{}
 	}
@@ -275,7 +279,7 @@ func syncRemoteLocal(srcInfo *RemoteInfo, target string, opts Options) {
 		case pkgSync.ActionCopy:
 			logger.Info("Pulling %s", a.Path)
 			// Worker connection
-			wt, err := connectAndAuth(srcInfo, false, opts)
+			wt, _, err := connectAndAuth(srcInfo, false, opts)
 			if err != nil {
 				return err
 			}
@@ -355,7 +359,7 @@ func syncRemoteLocal(srcInfo *RemoteInfo, target string, opts Options) {
 func syncLocalRemote(source string, tgtInfo *RemoteInfo, opts Options) {
 	logger.Info("Syncing Local %s -> Remote %s", source, tgtInfo.Host)
 
-	t, err := connectAndAuth(tgtInfo, true, opts) // Client is Sender
+	t, remoteExcludes, err := connectAndAuth(tgtInfo, true, opts) // Client is Sender
 	if err != nil {
 		logger.Error("Connection failed: %v", err)
 		return
@@ -374,7 +378,11 @@ func syncLocalRemote(source string, tgtInfo *RemoteInfo, opts Options) {
 	}
 
 	// Scan Local
-	srcFiles, scanErr := pkgSync.Scan(source, nil, opts.Checksum)
+	excludes := []string{}
+	if remoteExcludes != "" {
+		excludes = strings.Split(remoteExcludes, ",")
+	}
+	srcFiles, scanErr := pkgSync.Scan(source, excludes, opts.Checksum)
 	if scanErr != nil {
 		logger.Error("Failed to scan local: %v", scanErr)
 		return
@@ -406,7 +414,7 @@ func syncLocalRemote(source string, tgtInfo *RemoteInfo, opts Options) {
 		switch a.Type {
 		case pkgSync.ActionDelete:
 			logger.Info("Remote Deleting %s", a.Path)
-			wt, err := connectAndAuth(tgtInfo, true, opts)
+			wt, _, err := connectAndAuth(tgtInfo, true, opts)
 			if err != nil {
 				return err
 			}
@@ -415,7 +423,7 @@ func syncLocalRemote(source string, tgtInfo *RemoteInfo, opts Options) {
 
 		case pkgSync.ActionCopy:
 			logger.Info("Pushing %s", a.Path)
-			wt, err := connectAndAuth(tgtInfo, true, opts)
+			wt, _, err := connectAndAuth(tgtInfo, true, opts)
 			if err != nil {
 				return err
 			}

@@ -33,8 +33,9 @@ type AuthRequest struct {
 }
 
 type AuthResponse struct {
-	Success bool
-	Message string
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+	Exclude string `json:"exclude,omitempty"`
 }
 
 type FileInfo struct {
