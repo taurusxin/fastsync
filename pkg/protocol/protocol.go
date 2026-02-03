@@ -74,12 +74,8 @@ func NewTransport(conn io.ReadWriteCloser) *Transport {
 func (t *Transport) EnableCompression() error {
 	t.zw = zlib.NewWriter(t.conn)
 	t.w = t.zw
-	var err error
-	t.zr, err = zlib.NewReader(t.conn)
-	if err != nil {
-		return err
-	}
-	t.r = t.zr
+	// Lazy initialize zlib reader when first read is needed to avoid deadlock
+	// because zlib.NewReader tries to read header immediately.
 	return nil
 }
 
@@ -112,6 +108,15 @@ func (t *Transport) Send(msgType MessageType, data []byte) error {
 }
 
 func (t *Transport) ReadHeader() (MessageType, uint32, error) {
+	if t.zw != nil && t.zr == nil {
+		var err error
+		t.zr, err = zlib.NewReader(t.conn)
+		if err != nil {
+			return 0, 0, err
+		}
+		t.r = t.zr
+	}
+
 	header := make([]byte, 5)
 	if _, err := io.ReadFull(t.r, header); err != nil {
 		return 0, 0, err
