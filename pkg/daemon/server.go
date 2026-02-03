@@ -39,7 +39,6 @@ func Run(cfg *config.Config) {
 func handleConn(conn net.Conn, cfg *config.Config) {
 	defer conn.Close()
 	remoteIP, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
-	logger.Info("New connection from %s", remoteIP)
 
 	transport := protocol.NewTransport(conn)
 
