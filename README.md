@@ -1,29 +1,57 @@
-# Fastsync
+# fastsync
+
+⚡ **fastsync** is a fast, cross-platform file synchronization tool inspired by rsync,
+designed for modern systems and simpler workflows.
+
+It works seamlessly on **Linux, macOS, and Windows**, without relying on rsync or platform-specific hacks.
 
 [中文文档](README.zh.md)
 
-**Fastsync** is a cross-platform, high-performance file synchronization tool designed to be a modern alternative to rsync. It supports both local and remote file synchronization with a modular design and easy configuration.
+---
+
+## Why fastsync?
+
+rsync is powerful, but it comes with trade-offs:
+
+- Painful setup on Windows
+- Complex flags and legacy behavior
+- Server-side configuration is not always straightforward
+
+**fastsync** focuses on being:
+
+- 🚀 **Cross-platform by default** — no WSL, no cygwin
+- 🧩 **Modular** — daemon + instances, clean separation
+- ⚙️ **Easy to configure** — simple TOML config
+- 🔐 **Secure** — authentication and IP access control
+
+---
 
 ## Features
 
-* **Cross-Platform**: Works on Linux, macOS, and Windows.
-* **Dual Modes**:
-  * **Daemon Mode**: Runs as a server, configured via TOML.
-  * **Normal Mode**: Runs as a CLI tool for ad-hoc syncs (local-local or local-remote).
-* **Efficient**: Supports incremental sync and compression.
-* **Secure**: Password authentication and IP access control (allow/deny lists).
-* **Flexible**: Supports file exclusion, attribute preservation, and detailed logging.
+- **Cross-Platform**: Linux / macOS / Windows
+- **Two Modes**
+  - **Daemon Mode**: Run as a long-lived sync server
+  - **CLI Mode**: One-off local or remote synchronization
+- **Efficient Transfer**
+  - Incremental sync
+  - Optional compression
+- **Security**
+  - Password authentication
+  - IP allow / deny lists
+- **Flexible**
+  - File exclusion rules
+  - Attribute preservation
+  - Per-instance logging
 
-### Installation
+---
+
+## Installation
 
 Build from source:
 
 ```bash
-# Clone the repository
 git clone https://github.com/taurusxin/fastsync.git
 cd fastsync
-
-# Build
 go build -o fastsync ./cmd/fastsync
 ```
 
@@ -51,11 +79,11 @@ You can also run Fastsync using Docker.
       taurusxin/fastsync:latest
     ```
 
-### Usage
+## Quickstart
 
-#### 1. Daemon Mode (Server)
+### 1. Daemon Mode (Server)
 
-Start the server with a configuration file:
+If you don't plan to deploy with Docker, you can start the server with a configuration file:
 
 ```bash
 ./fastsync -c config.toml
@@ -63,7 +91,7 @@ Start the server with a configuration file:
 
 See [Configuration](#configuration) for details on `config.toml`.
 
-#### 2. Normal Mode (Client)
+### 2. Normal Mode (Client)
 
 Synchronize files between source and target.
 
@@ -73,19 +101,19 @@ Synchronize files between source and target.
 fastsync source target [options]
 ```
 
-* **Source/Target**: Can be a local path or a remote address.
-  * Local: `/path/to/dir`
-  * Remote: `password@ip:port/instance_name` (Default instance is `default`)
-  * *Note*: At least one path must be local.
+- **Source/Target**: Can be a local path or a remote address.
+  - Local: `/path/to/dir`
+  - Remote: `password@ip:port/instance_name` (Default instance is `default`)
+  - *Note*: At least one path must be local.
 
 **Options:**
 
-* `-d`: **Delete**. Delete files in target that are missing in source.
-* `-o`: **Overwrite**. Overwrite existing files in target (default is to skip if size/time matches).
-* `-s`: **Checksum**. Use content hashing to detect changes (slower but more accurate).
-* `-z`: **Compress**. Enable zlib compression during transfer.
-* `-a`: **Archive**. Preserve file attributes (permissions, modification time).
-* `-v`: **Verbose**. Print detailed logs during synchronization.
+- `-d`: **Delete**. Delete files in target that are missing in source.
+- `-o`: **Overwrite**. Overwrite existing files in target (default is to skip if size/time matches).
+- `-s`: **Checksum**. Use content hashing to detect changes (slower but more accurate).
+- `-z`: **Compress**. Enable zlib compression during transfer.
+- `-a`: **Archive**. Preserve file attributes (permissions, modification time).
+- `-v`: **Verbose**. Print detailed logs during synchronization.
 
 **Examples:**
 
@@ -100,23 +128,33 @@ fastsync source target [options]
 ./fastsync secret@192.168.1.100:7963/backup ./restore -d -a
 ```
 
-### Configuration
+**Note: At least one path must be local.**
+
+## Configuration
 
 A sample configuration file (`fastsync.toml.example`) is provided.
 
 **Global Settings:**
 
-* `address`: Bind address (default "127.0.0.1").
-* `port`: Listening port (default 7963).
-* `log_level`: Global log level (info, warn, error).
-* `log_file`: Path to global log file.
+- `address`: Bind address (default "127.0.0.1").
+- `port`: Listening port (default 7963).
+- `log_level`: Global log level (info, warn, error).
+- `log_file`: Path to global log file.
 
 **Instance Settings:**
 
-* `name`: Unique name for the sync module.
-* `path`: Local file system path to serve.
-* `password`: Authentication password.
-* `exclude`: Comma-separated list of glob patterns to ignore.
-* `host_allow` / `host_deny`: CIDR IP lists for access control.
-* `log_level`: Instance log level.
-* `log_file`: Path to instance log file.
+- `name`: Unique name for the sync module.
+- `path`: Local file system path to serve.
+- `password`: Authentication password.
+- `exclude`: Comma-separated list of glob patterns to ignore.
+- `host_allow` / `host_deny`: CIDR IP lists for access control.
+- `log_level`: Instance log level.
+- `log_file`: Path to instance log file.
+
+## Roadmap
+
+- [ ] Configuration file hot reload
+- [ ] Incremental sync
+- [ ] File encryption
+- [ ] Resume interrupted transfers
+- [ ] Multi-point chunked transfers for large files
