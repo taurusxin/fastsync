@@ -19,6 +19,20 @@ import (
 	"github.com/taurusxin/fastsync/pkg/utils"
 )
 
+func newProgressBar(max int64, description string) *progressbar.ProgressBar {
+	return progressbar.NewOptions64(
+		max,
+		progressbar.OptionSetDescription(description),
+		progressbar.OptionSetWriter(os.Stdout),
+		progressbar.OptionShowBytes(true),
+		progressbar.OptionSetWidth(15),
+		progressbar.OptionThrottle(65*time.Millisecond),
+		progressbar.OptionShowCount(),
+		progressbar.OptionClearOnFinish(),
+		progressbar.OptionUseIECUnits(true),
+	)
+}
+
 type Options struct {
 	Delete    bool
 	Overwrite bool
@@ -90,7 +104,7 @@ func Run(source, target string, opts Options) {
 		syncLocalRemote(source, tgtRemote, opts)
 	}
 
-	logger.Info("Sync completed in %v", time.Since(start))
+	logger.Info("Sync completed in %.2fs", time.Since(start).Seconds())
 }
 
 func syncLocalLocal(source, target string, opts Options) {
@@ -159,7 +173,7 @@ func syncLocalLocal(source, target string, opts Options) {
 				continue
 			}
 			logger.Info("Copying %s", a.Path)
-			bar := progressbar.DefaultBytes(
+			bar := newProgressBar(
 				a.Info.Size,
 				fmt.Sprintf("Copying %s", a.Path),
 			)
@@ -184,7 +198,7 @@ func syncLocalLocal(source, target string, opts Options) {
 
 	elapsed := time.Since(startTime)
 	avgSpeed := float64(totalSize) / elapsed.Seconds()
-	logger.Info("Total size: %s, Time elapsed: %v, Average speed: %s/s", utils.FormatBytes(totalSize), elapsed, utils.FormatBytes(int64(avgSpeed)))
+	logger.Info("Total size: %s, Time elapsed: %.2fs, Average speed: %s/s", utils.FormatBytes(totalSize), elapsed.Seconds(), utils.FormatBytes(int64(avgSpeed)))
 }
 
 func copyFile(src, dst string, mode uint32, bar *progressbar.ProgressBar) error {
@@ -311,7 +325,7 @@ func syncRemoteLocal(srcInfo *RemoteInfo, target string, opts Options) {
 		switch a.Type {
 		case pkgSync.ActionDelete:
 			logger.Info("Deleting %s", a.Path)
-			if err := os.Remove(tgtPath); err != nil {
+			if err = os.Remove(tgtPath); err != nil {
 				logger.Error("Error deleting %s: %v", a.Path, err)
 			}
 
@@ -360,7 +374,7 @@ func syncRemoteLocal(srcInfo *RemoteInfo, target string, opts Options) {
 				continue
 			}
 
-			bar := progressbar.DefaultBytes(
+			bar := newProgressBar(
 				startMsg.Size,
 				fmt.Sprintf("Pulling %s", a.Path),
 			)
@@ -400,7 +414,7 @@ func syncRemoteLocal(srcInfo *RemoteInfo, target string, opts Options) {
 
 	elapsed := time.Since(startTime)
 	avgSpeed := float64(totalSize) / elapsed.Seconds()
-	logger.Info("Total size: %s, Time elapsed: %v, Average speed: %s/s", utils.FormatBytes(totalSize), elapsed, utils.FormatBytes(int64(avgSpeed)))
+	logger.Info("Total size: %s, Time elapsed: %.2fs, Average speed: %s/s", utils.FormatBytes(totalSize), elapsed.Seconds(), utils.FormatBytes(int64(avgSpeed)))
 }
 
 func syncLocalRemote(source string, tgtInfo *RemoteInfo, opts Options) {
@@ -503,7 +517,7 @@ func syncLocalRemote(source string, tgtInfo *RemoteInfo, opts Options) {
 				ModTime: info.ModTime().Unix(),
 			})
 
-			bar := progressbar.DefaultBytes(
+			bar := newProgressBar(
 				info.Size(),
 				fmt.Sprintf("Pushing %s", a.Path),
 			)
@@ -529,5 +543,5 @@ func syncLocalRemote(source string, tgtInfo *RemoteInfo, opts Options) {
 
 	elapsed := time.Since(startTime)
 	avgSpeed := float64(totalSize) / elapsed.Seconds()
-	logger.Info("Total size: %s, Time elapsed: %v, Average speed: %s/s", utils.FormatBytes(totalSize), elapsed, utils.FormatBytes(int64(avgSpeed)))
+	logger.Info("Total size: %s, Time elapsed: %.2fs, Average speed: %s/s", utils.FormatBytes(totalSize), elapsed.Seconds(), utils.FormatBytes(int64(avgSpeed)))
 }
