@@ -30,3 +30,6 @@ Thumbs.db
 config.toml
 *.toml
 !fastsync.toml.example
+
+# Release
+dist/
