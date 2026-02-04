@@ -10,7 +10,7 @@
 * **Dual Modes**:
   * **Daemon Mode**: Runs as a server, configured via TOML.
   * **Normal Mode**: Runs as a CLI tool for ad-hoc syncs (local-local or local-remote).
-* **Efficient**: Supports incremental sync, multi-threaded transfer, and compression.
+* **Efficient**: Supports incremental sync and compression.
 * **Secure**: Password authentication and IP access control (allow/deny lists).
 * **Flexible**: Supports file exclusion, attribute preservation, and detailed logging.
 
@@ -61,7 +61,6 @@ fastsync source target [options]
 * `-s`: **Checksum**. Use content hashing to detect changes (slower but more accurate).
 * `-z`: **Compress**. Enable zlib compression during transfer.
 * `-a`: **Archive**. Preserve file attributes (permissions, modification time).
-* `-t <count>`: **Threads**. Number of concurrent transfer threads (default: 1).
 * `-v`: **Verbose**. Print detailed logs during synchronization.
 
 **Examples:**
@@ -71,7 +70,7 @@ fastsync source target [options]
 ./fastsync ./source ./target -v -a
 
 # Local to Remote (Push)
-./fastsync ./source secret@192.168.1.100:7963/backup -z -t 4
+./fastsync ./source secret@192.168.1.100:7963/backup -z
 
 # Remote to Local (Pull)
 ./fastsync secret@192.168.1.100:7963/backup ./restore -d -a

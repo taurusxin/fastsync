@@ -9,9 +9,9 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
+	"github.com/schollz/progressbar/v3"
 	"github.com/taurusxin/fastsync/pkg/logger"
 
 	"github.com/taurusxin/fastsync/pkg/protocol"
@@ -25,7 +25,6 @@ type Options struct {
 	Checksum  bool
 	Compress  bool
 	Archive   bool
-	Threads   int
 	Verbose   bool
 }
 
@@ -122,11 +121,21 @@ func syncLocalLocal(source, target string, opts Options) {
 
 	logger.Info("Found %d actions", len(actions))
 
+	// Calculate total size for summary
+	var totalSize int64
+	for _, a := range actions {
+		if a.Type == pkgSync.ActionCopy {
+			totalSize += a.Info.Size
+		}
+	}
+
 	// Check if source is a file
 	srcInfo, _ := os.Stat(source)
 	isSourceFile := srcInfo != nil && !srcInfo.IsDir()
 
-	executeActions(actions, opts.Threads, func(a pkgSync.FileAction) error {
+	startTime := time.Now()
+
+	for _, a := range actions {
 		var srcPath string
 		var err error
 		if isSourceFile {
@@ -134,7 +143,8 @@ func syncLocalLocal(source, target string, opts Options) {
 		} else {
 			srcPath, err = utils.SecureJoin(source, a.Path)
 			if err != nil {
-				return err
+				logger.Error("Error processing %s: %v", a.Path, err)
+				continue
 			}
 		}
 		tgtPath, _ := utils.SecureJoin(target, a.Path)
@@ -143,11 +153,19 @@ func syncLocalLocal(source, target string, opts Options) {
 		case pkgSync.ActionCopy:
 			if a.Info.IsDir {
 				logger.Info("Creating directory %s", a.Path)
-				return os.MkdirAll(tgtPath, 0755)
+				if err := os.MkdirAll(tgtPath, 0755); err != nil {
+					logger.Error("Error creating directory %s: %v", a.Path, err)
+				}
+				continue
 			}
 			logger.Info("Copying %s", a.Path)
-			if err := copyFile(srcPath, tgtPath, a.Info.Mode); err != nil {
-				return err
+			bar := progressbar.DefaultBytes(
+				a.Info.Size,
+				fmt.Sprintf("Copying %s", a.Path),
+			)
+			if err := copyFile(srcPath, tgtPath, a.Info.Mode, bar); err != nil {
+				logger.Error("Error copying %s: %v", a.Path, err)
+				continue
 			}
 			if opts.Archive {
 				if a.Info.ModTime > 0 {
@@ -156,16 +174,20 @@ func syncLocalLocal(source, target string, opts Options) {
 				// Mode is already set by copyFile but maybe strict chmod is needed?
 				os.Chmod(tgtPath, os.FileMode(a.Info.Mode))
 			}
-			return nil
 		case pkgSync.ActionDelete:
 			logger.Info("Deleting %s", a.Path)
-			return os.RemoveAll(tgtPath) // RemoveAll for dirs
+			if err := os.RemoveAll(tgtPath); err != nil {
+				logger.Error("Error deleting %s: %v", a.Path, err)
+			}
 		}
-		return nil
-	})
+	}
+
+	elapsed := time.Since(startTime)
+	avgSpeed := float64(totalSize) / elapsed.Seconds()
+	logger.Info("Total size: %s, Time elapsed: %v, Average speed: %s/s", utils.FormatBytes(totalSize), elapsed, utils.FormatBytes(int64(avgSpeed)))
 }
 
-func copyFile(src, dst string, mode uint32) error {
+func copyFile(src, dst string, mode uint32, bar *progressbar.ProgressBar) error {
 	s, err := os.Open(src)
 	if err != nil {
 		return err
@@ -179,7 +201,12 @@ func copyFile(src, dst string, mode uint32) error {
 	}
 	defer d.Close()
 
-	_, err = io.Copy(d, s)
+	var writer io.Writer = d
+	if bar != nil {
+		writer = io.MultiWriter(d, bar)
+	}
+
+	_, err = io.Copy(writer, s)
 	return err
 }
 
@@ -267,44 +294,47 @@ func syncRemoteLocal(srcInfo *RemoteInfo, target string, opts Options) {
 	})
 	logger.Info("Found %d actions", len(actions))
 
+	// Calculate total size for summary
+	var totalSize int64
+	for _, a := range actions {
+		if a.Type == pkgSync.ActionCopy {
+			totalSize += a.Info.Size
+		}
+	}
+
+	startTime := time.Now()
+
 	// 5. Execute
-	// Use worker pool with persistent connections
-	executeWithWorkerPool(actions, opts.Threads, srcInfo, false, opts, func(wt *protocol.Transport, a pkgSync.FileAction) error {
+	for _, a := range actions {
 		tgtPath, _ := utils.SecureJoin(target, a.Path)
 
 		switch a.Type {
 		case pkgSync.ActionDelete:
 			logger.Info("Deleting %s", a.Path)
-			return os.Remove(tgtPath)
+			if err := os.Remove(tgtPath); err != nil {
+				logger.Error("Error deleting %s: %v", a.Path, err)
+			}
 
 		case pkgSync.ActionCopy:
 			logger.Info("Pulling %s", a.Path)
 
 			// Request File
-			if err = wt.Send(protocol.MsgFileReq, []byte(a.Path)); err != nil {
-				return err
+			if err = t.Send(protocol.MsgFileReq, []byte(a.Path)); err != nil {
+				logger.Error("Error requesting file %s: %v", a.Path, err)
+				continue
 			}
 
 			// Receive Start
 			var startMsg protocol.StartFileMsg
 			var mt protocol.MessageType
-			mt, err = wt.ReadJSON(&startMsg)
+			mt, err = t.ReadJSON(&startMsg)
 			if err != nil {
-				return err
+				logger.Error("Error reading start msg for %s: %v", a.Path, err)
+				continue
 			}
 			if mt == protocol.MsgError {
-				// We need to read the error message which is just raw bytes for MsgError
-				// But ReadJSON might have failed or read something else.
-				// Actually MsgError payload is raw bytes in server: t.Send(protocol.MsgError, []byte(err.Error()))
-				// So ReadJSON would fail or return partial?
-				// protocol.ReadJSON expects JSON. MsgError is NOT JSON in server impl?
-				// Let's check server.go: t.Send(protocol.MsgError, []byte(err.Error()))
-				// So we should handle MsgError specifically before Unmarshal?
-				// ReadJSON calls ReadHeader then ReadFull then Unmarshal.
-				// If header says MsgError, ReadJSON unmarshal will fail if it's not JSON.
-				// We should fix this logic, but for now let's assume it works or fail.
-				// Better: check mt before assuming success.
-				return fmt.Errorf("remote error")
+				logger.Error("Remote error for %s", a.Path)
+				continue
 			}
 
 			// Ensure dir exists
@@ -313,34 +343,43 @@ func syncRemoteLocal(srcInfo *RemoteInfo, target string, opts Options) {
 			if os.FileMode(startMsg.Mode).IsDir() {
 				os.MkdirAll(tgtPath, 0755)
 				// Read EndFile
-				mt, _, err = wt.ReadHeader()
+				mt, _, err = t.ReadHeader()
 				if err != nil {
-					return err
+					logger.Error("Error reading end file for dir %s: %v", a.Path, err)
+					continue
 				}
 				if mt != protocol.MsgEndFile {
-					return fmt.Errorf("expected EndFile")
+					logger.Error("Expected EndFile for dir %s", a.Path)
 				}
-				return nil
+				continue
 			}
 
 			f, err := os.OpenFile(tgtPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(startMsg.Mode))
 			if err != nil {
-				return err
+				logger.Error("Error opening file %s: %v", tgtPath, err)
+				continue
 			}
+
+			bar := progressbar.DefaultBytes(
+				startMsg.Size,
+				fmt.Sprintf("Pulling %s", a.Path),
+			)
 
 			// Read Data
 			var data []byte
 			for {
-				mt, data, err = wt.ReadData()
+				mt, data, err = t.ReadData()
 				if err != nil {
 					f.Close()
-					return err
+					logger.Error("Error reading data for %s: %v", a.Path, err)
+					break
 				}
 				if mt == protocol.MsgEndFile {
 					break
 				}
 				if mt == protocol.MsgData {
-					f.Write(data)
+					n, _ := f.Write(data)
+					bar.Add(n)
 				}
 			}
 			f.Close()
@@ -354,11 +393,14 @@ func syncRemoteLocal(srcInfo *RemoteInfo, target string, opts Options) {
 					os.Chmod(tgtPath, os.FileMode(startMsg.Mode))
 				}
 			}
-
-			return nil
 		}
-		return nil
-	})
+	}
+
+	t.Send(protocol.MsgDone, nil)
+
+	elapsed := time.Since(startTime)
+	avgSpeed := float64(totalSize) / elapsed.Seconds()
+	logger.Info("Total size: %s, Time elapsed: %v, Average speed: %s/s", utils.FormatBytes(totalSize), elapsed, utils.FormatBytes(int64(avgSpeed)))
 }
 
 func syncLocalRemote(source string, tgtInfo *RemoteInfo, opts Options) {
@@ -400,11 +442,21 @@ func syncLocalRemote(source string, tgtInfo *RemoteInfo, opts Options) {
 	})
 	logger.Info("Found %d actions", len(actions))
 
+	// Calculate total size for summary
+	var totalSize int64
+	for _, a := range actions {
+		if a.Type == pkgSync.ActionCopy {
+			totalSize += a.Info.Size
+		}
+	}
+
+	startTime := time.Now()
+
 	// Check if source is a file
 	srcInfo, _ := os.Stat(source)
 	isSourceFile := srcInfo != nil && !srcInfo.IsDir()
 
-	executeWithWorkerPool(actions, opts.Threads, tgtInfo, true, opts, func(wt *protocol.Transport, a pkgSync.FileAction) error {
+	for _, a := range actions {
 		var srcPath string
 		var err error
 		if isSourceFile {
@@ -412,135 +464,70 @@ func syncLocalRemote(source string, tgtInfo *RemoteInfo, opts Options) {
 		} else {
 			srcPath, err = utils.SecureJoin(source, a.Path)
 			if err != nil {
-				return err
+				logger.Error("Error secure join %s: %v", a.Path, err)
+				continue
 			}
 		}
 
 		switch a.Type {
 		case pkgSync.ActionDelete:
 			logger.Info("Remote Deleting %s", a.Path)
-			wt.Send(protocol.MsgDeleteFile, []byte(a.Path))
+			t.Send(protocol.MsgDeleteFile, []byte(a.Path))
 
 		case pkgSync.ActionCopy:
 			logger.Info("Pushing %s", a.Path)
 
 			if a.Info.IsDir {
-				wt.SendJSON(protocol.MsgStartFile, protocol.StartFileMsg{
+				t.SendJSON(protocol.MsgStartFile, protocol.StartFileMsg{
 					Path: a.Path,
 					Size: 0,
 					Mode: uint32(a.Info.Mode),
 				})
-				wt.Send(protocol.MsgEndFile, nil)
-				return nil
+				t.Send(protocol.MsgEndFile, nil)
+				continue
 			}
 
 			f, openErr := os.Open(srcPath)
 			if openErr != nil {
-				return openErr
+				logger.Error("Error opening %s: %v", srcPath, openErr)
+				continue
 			}
-			// defer f.Close() // Don't defer in loop or handler? Handler returns, so defer is fine.
-			// But careful with resource limits if many files?
-			// Handler runs sequentially per worker.
 
 			info, _ := f.Stat()
 
 			// Send Start
-			wt.SendJSON(protocol.MsgStartFile, protocol.StartFileMsg{
+			t.SendJSON(protocol.MsgStartFile, protocol.StartFileMsg{
 				Path:    a.Path,
 				Size:    info.Size(),
 				Mode:    uint32(info.Mode()),
 				ModTime: info.ModTime().Unix(),
 			})
 
+			bar := progressbar.DefaultBytes(
+				info.Size(),
+				fmt.Sprintf("Pushing %s", a.Path),
+			)
+
 			// Send Data
 			buf := make([]byte, 32*1024)
 			for {
 				n, readErr := f.Read(buf)
 				if n > 0 {
-					wt.Send(protocol.MsgData, buf[:n])
+					t.Send(protocol.MsgData, buf[:n])
+					bar.Add(n)
 				}
 				if readErr != nil {
 					break
 				}
 			}
-			wt.Send(protocol.MsgEndFile, nil)
+			t.Send(protocol.MsgEndFile, nil)
 			f.Close()
 		}
-		return nil
-	})
+	}
 
 	t.Send(protocol.MsgDone, nil)
-}
 
-func executeWithWorkerPool(actions []pkgSync.FileAction, workerCount int, info *RemoteInfo, isSender bool, opts Options, handler func(*protocol.Transport, pkgSync.FileAction) error) {
-	if workerCount <= 0 {
-		workerCount = 1
-	}
-	if workerCount > len(actions) {
-		workerCount = len(actions)
-	}
-	if workerCount == 0 {
-		return
-	}
-
-	ch := make(chan pkgSync.FileAction, len(actions))
-	for _, a := range actions {
-		ch <- a
-	}
-	close(ch)
-
-	var wg sync.WaitGroup
-	wg.Add(workerCount)
-	for i := 0; i < workerCount; i++ {
-		go func() {
-			defer wg.Done()
-			wt, _, err := connectAndAuth(info, isSender, opts)
-			if err != nil {
-				logger.Error("Worker connection failed: %v", err)
-				return
-			}
-			defer wt.Close()
-
-			for a := range ch {
-				if err := handler(wt, a); err != nil {
-					logger.Error("Error processing %s: %v", a.Path, err)
-				}
-			}
-			wt.Send(protocol.MsgDone, nil)
-		}()
-	}
-	wg.Wait()
-}
-
-func executeActions(actions []pkgSync.FileAction, workerCount int, handler func(pkgSync.FileAction) error) {
-	if workerCount <= 0 {
-		workerCount = 1
-	}
-	// Cap worker count at number of actions
-	if workerCount > len(actions) {
-		workerCount = len(actions)
-	}
-	if workerCount == 0 {
-		return
-	}
-
-	ch := make(chan pkgSync.FileAction, len(actions))
-	for _, a := range actions {
-		ch <- a
-	}
-	close(ch)
-
-	var wg sync.WaitGroup
-	wg.Add(workerCount)
-	for i := 0; i < workerCount; i++ {
-		go func() {
-			defer wg.Done()
-			for a := range ch {
-				if err := handler(a); err != nil {
-					logger.Error("Error processing %s: %v", a.Path, err)
-				}
-			}
-		}()
-	}
-	wg.Wait()
+	elapsed := time.Since(startTime)
+	avgSpeed := float64(totalSize) / elapsed.Seconds()
+	logger.Info("Total size: %s, Time elapsed: %v, Average speed: %s/s", utils.FormatBytes(totalSize), elapsed, utils.FormatBytes(int64(avgSpeed)))
 }

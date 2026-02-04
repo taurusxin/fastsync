@@ -8,7 +8,7 @@
    **双模式**：
   * **守护模式**：作为服务器运行，通过 TOML 文件配置。
   * **普通模式**：作为命令行工具运行，用于临时同步（本地-本地 或 本地-远程）。
-* **高效**：支持增量同步、多线程传输和数据压缩。
+* **高效**：支持增量同步和数据压缩。
 * **安全**：支持密码认证和 IP 访问控制（白名单/黑名单）。
 * **灵活**：支持文件排除、属性保留和详细日志记录。
 
@@ -59,7 +59,6 @@ fastsync source target [options]
 * `-s`: **哈希校验 (Checksum)**。使用内容哈希检测文件变化（较慢但更准确）。
 * `-z`: **压缩 (Compress)**。传输时启用 zlib 压缩。
 * `-a`: **归档 (Archive)**。保留文件属性（权限、修改时间等）。
-* `-t <count>`：**线程 (Threads)**。并发传输的线程数量（默认：1）。
 * `-v`: **详细 (Verbose)**。同步时输出详细日志。
 
 **示例：**
@@ -69,7 +68,7 @@ fastsync source target [options]
 ./fastsync ./source ./target -v -a
 
 # 本地同步到远程 (推模式)
-./fastsync ./source secret@192.168.1.100:7963/backup -z -t 4
+./fastsync ./source secret@192.168.1.100:7963/backup -z
 
 # 远程同步到本地 (拉模式)
 ./fastsync secret@192.168.1.100:7963/backup ./restore -d -a
