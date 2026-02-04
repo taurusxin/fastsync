@@ -181,6 +181,7 @@ func syncLocalLocal(source, target string, opts Options) {
 				logger.Error("Error copying %s: %v", a.Path, err)
 				continue
 			}
+			bar.Finish()
 			if opts.Archive {
 				if a.Info.ModTime > 0 {
 					os.Chtimes(tgtPath, time.Unix(a.Info.ModTime, 0), time.Unix(a.Info.ModTime, 0))
@@ -396,6 +397,7 @@ func syncRemoteLocal(srcInfo *RemoteInfo, target string, opts Options) {
 					bar.Add(n)
 				}
 			}
+			bar.Finish()
 			f.Close()
 
 			// Restore attributes if Archive mode is enabled
@@ -534,6 +536,7 @@ func syncLocalRemote(source string, tgtInfo *RemoteInfo, opts Options) {
 					break
 				}
 			}
+			bar.Finish()
 			t.Send(protocol.MsgEndFile, nil)
 			f.Close()
 		}
