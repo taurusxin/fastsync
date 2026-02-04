@@ -80,15 +80,26 @@ func (l *Logger) Output(level Level, msg string) {
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
 
 	// Determine if we should use colors.
-	// We only use colors if writing to stdout/stderr.
-	// For simplicity, we'll assume we want colors if the user installed the library and requested it.
-	// fatih/color automatically disables colors if output is not a TTY, which is good.
+	useColor := false
+	if f, ok := l.out.(*os.File); ok {
+		if f == os.Stdout || f == os.Stderr {
+			useColor = true
+		}
+	}
 
-	levelStr := level.ColorString()
+	var levelStr string
+	var prefixStr string
 
-	prefixStr := ""
-	if l.prefix != "" {
-		prefixStr = fmt.Sprintf("[%s] ", color.CyanString(l.prefix))
+	if useColor {
+		levelStr = level.ColorString()
+		if l.prefix != "" {
+			prefixStr = fmt.Sprintf("[%s] ", color.CyanString(l.prefix))
+		}
+	} else {
+		levelStr = level.String()
+		if l.prefix != "" {
+			prefixStr = fmt.Sprintf("[%s] ", l.prefix)
+		}
 	}
 
 	fmt.Fprintf(l.out, "[%s] [%s] %s%s\n", timestamp, levelStr, prefixStr, msg)
