@@ -27,6 +27,30 @@ cd fastsync
 go build -o fastsync ./cmd/fastsync
 ```
 
+### Docker Deployment
+
+You can also run Fastsync using Docker.
+
+1. **Prepare Configuration**:
+    Create a `config.toml` file. You can base it on `config.toml.example`. Ensure paths in config point to `/data` or other mounted volumes.
+
+    ```toml
+    # Example snippet for docker config.toml
+    [instances]
+    path = "/data"  # Map to volume inside container
+    ```
+
+2. **Run Container**:
+
+    ```bash
+    docker run -d \
+      --name fastsync \
+      -p 7963:7963 \
+      -v $(pwd)/config.toml:/config/config.toml \
+      -v $(pwd)/data:/data \
+      taurusxin/fastsync:latest
+    ```
+
 ### Usage
 
 #### 1. Daemon Mode (Server)

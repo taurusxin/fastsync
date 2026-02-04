@@ -25,6 +25,30 @@ cd fastsync
 go build -o fastsync ./cmd/fastsync
 ```
 
+### Docker 部署
+
+你也可以使用 Docker 来运行 Fastsync。
+
+1. **准备配置文件**：
+    创建一个 `config.toml` 文件。你可以参考 `config.toml.example`。确保配置文件中的路径指向容器内的挂载点（如 `/data`）。
+
+    ```toml
+    # Docker 配置文件示例片段
+    [[instances]]
+    path = "/data"  # 映射到容器内的路径
+    ```
+
+2. **运行容器**：
+
+    ```bash
+    docker run -d \
+      --name fastsync \
+      -p 7963:7963 \
+      -v $(pwd)/config.toml:/config/config.toml \
+      -v $(pwd)/data:/data \
+      taurusxin/fastsync:latest
+    ```
+
 ### 使用方法
 
 #### 1. 守护模式 (服务端)
