@@ -1,5 +1,5 @@
 # Binaries
-fastsync
+/fastsync
 fastsync.exe
 fastsync-test
 *.o
