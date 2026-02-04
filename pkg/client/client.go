@@ -198,7 +198,10 @@ func syncLocalLocal(source, target string, opts Options) {
 	}
 
 	elapsed := time.Since(startTime)
-	avgSpeed := float64(totalSize) / elapsed.Seconds()
+	var avgSpeed float64
+	if totalSize > 0 && elapsed.Seconds() > 0 {
+		avgSpeed = float64(totalSize) / elapsed.Seconds()
+	}
 	logger.Info("Total size: %s, Time elapsed: %.2fs, Average speed: %s/s", utils.FormatBytes(totalSize), elapsed.Seconds(), utils.FormatBytes(int64(avgSpeed)))
 }
 
@@ -415,7 +418,10 @@ func syncRemoteLocal(srcInfo *RemoteInfo, target string, opts Options) {
 	t.Send(protocol.MsgDone, nil)
 
 	elapsed := time.Since(startTime)
-	avgSpeed := float64(totalSize) / elapsed.Seconds()
+	var avgSpeed float64
+	if totalSize > 0 && elapsed.Seconds() > 0 {
+		avgSpeed = float64(totalSize) / elapsed.Seconds()
+	}
 	logger.Info("Total size: %s, Time elapsed: %.2fs, Average speed: %s/s", utils.FormatBytes(totalSize), elapsed.Seconds(), utils.FormatBytes(int64(avgSpeed)))
 }
 
@@ -545,6 +551,9 @@ func syncLocalRemote(source string, tgtInfo *RemoteInfo, opts Options) {
 	t.Send(protocol.MsgDone, nil)
 
 	elapsed := time.Since(startTime)
-	avgSpeed := float64(totalSize) / elapsed.Seconds()
+	var avgSpeed float64
+	if totalSize > 0 && elapsed.Seconds() > 0 {
+		avgSpeed = float64(totalSize) / elapsed.Seconds()
+	}
 	logger.Info("Total size: %s, Time elapsed: %.2fs, Average speed: %s/s", utils.FormatBytes(totalSize), elapsed.Seconds(), utils.FormatBytes(int64(avgSpeed)))
 }
