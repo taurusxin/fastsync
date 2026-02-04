@@ -76,6 +76,7 @@ go build -o fastsync ./cmd/fastsync
       -p 7963:7963 \
       -v $(pwd)/config.toml:/config/config.toml \
       -v $(pwd)/data:/data \
+      -v $(pwd)/logs:/logs \
       taurusxin/fastsync:latest
     ```
 

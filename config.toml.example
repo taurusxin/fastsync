@@ -15,7 +15,7 @@ log_level = "info"
 # 全局日志文件路径
 # 记录服务器启动、连接建立等全局事件
 # 如果留空，通常输出到标准输出
-log_file = "./fastsync_global.log"
+log_file = "./logs/fastsync_global.log"
 
 
 # --- 实例配置 ---
@@ -27,7 +27,7 @@ log_file = "./fastsync_global.log"
 name = "default"
 
 # [必须] 服务端提供的文件路径
-path = "./test/source"
+path = "./data"
 
 # 实例密码，默认为空（不建议生产环境为空）
 password = "secret_password"
@@ -50,7 +50,7 @@ log_level = "info"
 
 # 该实例的日志目标，留空或 stdout 表示输出到控制台
 # 也可以指定具体的文件路径
-log_file = "./fastsync_default.log"
+log_file = "./logs/fastsync_default.log"
 
 
 # 实例 2：备份实例
