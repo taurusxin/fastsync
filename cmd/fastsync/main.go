@@ -81,11 +81,9 @@ func main() {
 	target := args[1]
 
 	// Setup Logger for Client
-	// If verbose, use Info, otherwise use Warn (only warnings and errors)
-	logLevel := logger.LevelWarn
-	if opts.Verbose {
-		logLevel = logger.LevelInfo
-	}
+	// Always use Info level to show basic summary.
+	// Detailed per-file logs will be controlled by opts.Verbose check in client code.
+	logLevel := logger.LevelInfo
 	logger.SetGlobal(logger.New(os.Stdout, logLevel, ""))
 
 	client.Run(source, target, opts)

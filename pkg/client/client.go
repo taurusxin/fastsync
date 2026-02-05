@@ -172,7 +172,9 @@ func syncLocalLocal(source, target string, opts Options) {
 				}
 				continue
 			}
-			logger.Info("Copying %s", a.Path)
+			if opts.Verbose {
+				logger.Info("Copying %s", a.Path)
+			}
 			bar := newProgressBar(
 				a.Info.Size,
 				fmt.Sprintf("Copying %s", a.Path),
@@ -190,7 +192,9 @@ func syncLocalLocal(source, target string, opts Options) {
 				os.Chmod(tgtPath, os.FileMode(a.Info.Mode))
 			}
 		case pkgSync.ActionDelete:
-			logger.Info("Deleting %s", a.Path)
+			if opts.Verbose {
+				logger.Info("Deleting %s", a.Path)
+			}
 			if err := os.RemoveAll(tgtPath); err != nil {
 				logger.Error("Error deleting %s: %v", a.Path, err)
 			}
@@ -328,13 +332,17 @@ func syncRemoteLocal(srcInfo *RemoteInfo, target string, opts Options) {
 
 		switch a.Type {
 		case pkgSync.ActionDelete:
-			logger.Info("Deleting %s", a.Path)
+			if opts.Verbose {
+				logger.Info("Deleting %s", a.Path)
+			}
 			if err = os.Remove(tgtPath); err != nil {
 				logger.Error("Error deleting %s: %v", a.Path, err)
 			}
 
 		case pkgSync.ActionCopy:
-			logger.Info("Pulling %s", a.Path)
+			if opts.Verbose {
+				logger.Info("Pulling %s", a.Path)
+			}
 
 			// Request File
 			if err = t.Send(protocol.MsgFileReq, []byte(a.Path)); err != nil {
@@ -493,11 +501,15 @@ func syncLocalRemote(source string, tgtInfo *RemoteInfo, opts Options) {
 
 		switch a.Type {
 		case pkgSync.ActionDelete:
-			logger.Info("Remote Deleting %s", a.Path)
+			if opts.Verbose {
+				logger.Info("Remote Deleting %s", a.Path)
+			}
 			t.Send(protocol.MsgDeleteFile, []byte(a.Path))
 
 		case pkgSync.ActionCopy:
-			logger.Info("Pushing %s", a.Path)
+			if opts.Verbose {
+				logger.Info("Pushing %s", a.Path)
+			}
 
 			if a.Info.IsDir {
 				t.SendJSON(protocol.MsgStartFile, protocol.StartFileMsg{
