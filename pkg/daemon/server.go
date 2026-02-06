@@ -70,7 +70,12 @@ func Run(cfg *config.Config) {
 }
 
 func handleConn(conn net.Conn, cfg *config.Config) {
-	defer conn.Close()
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error("Recovered from panic in handleConn: %v", r)
+		}
+		conn.Close()
+	}()
 	remoteIP, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
 
 	transport := protocol.NewTransport(conn)
@@ -135,6 +140,11 @@ func handleConn(conn net.Conn, cfg *config.Config) {
 	})
 	instLogger.Info("Client %s connected", remoteIP)
 
+	// Set initial read deadline for the handshake/command loop
+	// We'll update it during large transfers if needed, but keeping a deadline
+	// prevents dead connections.
+	conn.SetDeadline(time.Now().Add(1 * time.Hour))
+
 	if authReq.Compress {
 		if err := transport.EnableCompression(); err != nil {
 			instLogger.Error("Failed to enable compression: %v", err)
@@ -146,6 +156,12 @@ func handleConn(conn net.Conn, cfg *config.Config) {
 }
 
 func handleSession(t *protocol.Transport, inst *config.InstanceConfig, log *logger.Logger) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Error("Recovered from panic in handleSession: %v", r)
+		}
+	}()
+
 	buf := make([]byte, 32*1024)
 	for {
 		msgType, length, err := t.ReadHeader()

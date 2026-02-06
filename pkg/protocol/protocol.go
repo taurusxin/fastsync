@@ -4,6 +4,7 @@ import (
 	"compress/zlib"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"io"
 )
 
@@ -22,6 +23,12 @@ const (
 	MsgDeleteFile // Path
 	MsgError
 	MsgDone // Sync complete
+)
+
+const (
+	// MaxMessageSize limits the maximum size of a single message payload (10MB).
+	// This prevents OOM attacks where a malicious client sends a huge length header.
+	MaxMessageSize = 10 * 1024 * 1024
 )
 
 type AuthRequest struct {
@@ -127,6 +134,11 @@ func (t *Transport) ReadHeader() (MessageType, uint32, error) {
 	}
 	msgType := MessageType(header[0])
 	length := binary.BigEndian.Uint32(header[1:])
+
+	if length > MaxMessageSize {
+		return 0, 0, fmt.Errorf("message too large: %d > %d", length, MaxMessageSize)
+	}
+
 	return msgType, length, nil
 }
 
